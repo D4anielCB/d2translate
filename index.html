@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Destiny 2 Tradutor de Armas e Perks</title>
+    <!-- Incluindo Tailwind CSS para um design moderno -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Fonte personalizada para um visual mais limpo */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Estilo para a animação do loader */
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Gradiente suave com as cores do Brasil para a área de texto da esquerda */
+        #pt-area {
+            background: linear-gradient(135deg, rgba(0, 156, 59, 0.15), rgba(255, 223, 0, 0.15));
+        }
+        /* Gradiente suave com as cores da Inglaterra para a área de texto da direita */
+        #en-area {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(207, 20, 43, 0.15));
+        }
+        
+        /* Estilo para o ícone de link */
+        .link-icon:hover {
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex flex-col items-center min-h-screen p-4">
+
+    <div id="app" class="w-full max-w-4xl">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl font-bold mb-2">Destiny 2 Tradutor</h1>
+            <p class="text-lg text-gray-400">Traduza nomes de armas e perks entre Português e Inglês</p>
+        </header>
+
+        <!-- Seção do Loader -->
+        <div id="loader-container" class="text-center p-8">
+            <div class="loader inline-block"></div>
+            <p class="mt-4 text-gray-300">Carregando definições de itens da Bungie...</p>
+        </div>
+
+        <!-- Conteúdo Principal do Tradutor (inicialmente oculto) -->
+        <main id="translator-container" class="hidden">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Coluna Português (Input) -->
+                <div>
+                    <h3 class="text-xl font-semibold mb-2 text-center md:text-left">Português</h3>
+                    <textarea id="pt-area" class="w-full h-80 border border-gray-700 rounded-lg p-4 focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none" placeholder="Digite aqui..."></textarea>
+                </div>
+                <!-- Coluna Inglês (Input/Output) -->
+                <div>
+                    <h3 class="text-xl font-semibold mb-2 text-center md:text-left">Inglês</h3>
+                    <textarea id="en-area" class="w-full h-80 border border-gray-700 rounded-lg p-4 focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none" placeholder="Ou digite aqui..."></textarea>
+                </div>
+            </div>
+            
+            <!-- NOVA ÁREA DE RESULTADOS COM LINKS -->
+            <div id="links-area" class="mt-6 w-full">
+                <!-- Os links serão inseridos aqui pelo JavaScript -->
+            </div>
+        </main>
+    </div>
+
+    <script>
+    (async function () {
+        // Chave da API da Bungie.
+        const apiKey = "4b9c63922cef407083762d343b64e34f"; 
+        
+        // Dicionários para ambas as direções
+        const ptToEn = {};
+        const enToPt = {};
+
+        // Elementos da UI
+        const loaderContainer = document.getElementById('loader-container');
+        const translatorContainer = document.getElementById('translator-container');
+        const ptEl = document.getElementById('pt-area');
+        const enEl = document.getElementById('en-area');
+        const linksEl = document.getElementById('links-area');
+        
+        // Flag para evitar loops infinitos de tradução
+        let isUpdating = false;
+
+        /**
+         * Carrega o manifesto da API da Bungie e popula os dicionários de tradução.
+         */
+        async function loadManifest() {
+            try {
+                const res = await fetch("https://www.bungie.net/Platform/Destiny2/Manifest/", {
+                    headers: { "X-API-Key": apiKey }
+                });
+                const manifest = await res.json();
+
+                const ptUrl = "https://www.bungie.net" + manifest.Response.jsonWorldComponentContentPaths["pt-br"].DestinyInventoryItemDefinition;
+                const enUrl = "https://www.bungie.net" + manifest.Response.jsonWorldComponentContentPaths["en"].DestinyInventoryItemDefinition;
+
+                const [ptData, enData] = await Promise.all([
+                    fetch(ptUrl).then(r => r.json()),
+                    fetch(enUrl).then(r => r.json())
+                ]);
+
+                for (const hash in ptData) {
+                    const namePt = ptData[hash]?.displayProperties?.name?.trim();
+                    const nameEn = enData[hash]?.displayProperties?.name?.trim();
+                    
+                    if (namePt && nameEn && namePt !== "" && nameEn !== "") {
+                        const itemData = { namePt: namePt, nameEn: nameEn, hash: hash };
+                        ptToEn[namePt.toLowerCase()] = itemData;
+                        enToPt[nameEn.toLowerCase()] = itemData;
+                    }
+                }
+
+                loaderContainer.classList.add('hidden');
+                translatorContainer.classList.remove('hidden');
+
+            } catch (e) {
+                console.error("Erro ao carregar Manifest da Bungie:", e);
+                loaderContainer.innerHTML = '<p class="text-red-500">Falha ao carregar os dados da Bungie. Por favor, recarregue a página.</p>';
+            }
+        }
+
+        /**
+         * Lida com a entrada do usuário em qualquer um dos campos, traduzindo o texto
+         * e exibindo os links correspondentes.
+         * @param {'pt-en' | 'en-pt'} direction - A direção da tradução.
+         */
+        function handleTranslation(direction) {
+            if (isUpdating) return; // Previne o loop
+            isUpdating = true;
+
+            const sourceEl = direction === 'pt-en' ? ptEl : enEl;
+            const targetEl = direction === 'pt-en' ? enEl : ptEl;
+            const dictionary = direction === 'pt-en' ? ptToEn : enToPt;
+            const dictionaryKeys = Object.keys(dictionary);
+            
+            const sourceLines = sourceEl.value.split('\n');
+            const translatedItems = [];
+            
+            const translatedTextLines = sourceLines.map(line => {
+                const searchTerm = line.trim().toLowerCase();
+                if (!searchTerm) return "";
+
+                let result = dictionary[searchTerm];
+                if (!result) {
+                    const foundKey = dictionaryKeys.find(key => key.includes(searchTerm));
+                    if (foundKey) result = dictionary[foundKey];
+                }
+
+                if (result) {
+                    translatedItems.push(result);
+                    return direction === 'pt-en' ? result.nameEn : result.namePt;
+                }
+                return line;
+            });
+
+            targetEl.value = translatedTextLines.join('\n');
+            displayLinks(translatedItems);
+
+            // Permite a próxima atualização
+            setTimeout(() => { isUpdating = false; }, 0);
+        }
+        
+        /**
+         * Renderiza a lista de links na área de resultados.
+         * @param {Array<Object>} items - Uma lista de itens traduzidos.
+         */
+        function displayLinks(items) {
+            if (items.length === 0) {
+                linksEl.innerHTML = '';
+                return;
+            }
+            
+            const linkIcon = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-box-arrow-up-right inline-block" viewBox="0 0 16 16">
+                  <path fill-rule="evenodd" d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/>
+                  <path fill-rule="evenodd" d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"/>
+                </svg>
+            `;
+            
+            const linksHtml = items.map(item => `
+                <a href="https://www.light.gg/db/items/${item.hash}" target="_blank" title="Ver ${item.nameEn} no light.gg" 
+                   class="flex items-center gap-3 p-3 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors duration-200 mb-2">
+                    <span class="text-blue-400 link-icon">${linkIcon}</span>
+                    <div class="flex-grow">
+                        <span class="font-semibold text-white">${item.nameEn}</span>
+                        <span class="text-sm text-gray-400 block">${item.namePt}</span>
+                    </div>
+                </a>
+            `).join('');
+            
+            linksEl.innerHTML = `<h3 class="text-xl font-semibold mb-2">Resultados (light.gg)</h3>${linksHtml}`;
+        }
+
+        // Adiciona os event listeners para tradução em tempo real.
+        ptEl.addEventListener('input', () => handleTranslation('pt-en'));
+        enEl.addEventListener('input', () => handleTranslation('en-pt'));
+
+        // Inicia o carregamento do manifesto.
+        await loadManifest();
+    })();
+    </script>
+
+</body>
+</html>
