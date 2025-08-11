@@ -28,22 +28,30 @@
 
         /* Gradiente suave com as cores do Brasil para a área de texto da esquerda */
         #pt-area {
-            background: linear-gradient(135deg, rgba(0, 156, 59, 0.15), rgba(255, 223, 0, 0.15));
+            background: linear-gradient(135deg, rgba(0, 156, 59, 0.1), rgba(255, 223, 0, 0.1));
         }
         /* Gradiente suave com as cores da Inglaterra para a área de texto da direita */
         #en-area {
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(207, 20, 43, 0.15));
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(207, 20, 43, 0.1));
         }
         
-        /* Estilo para o ícone de link */
+        /* Define uma altura de linha fixa para facilitar o cálculo da posição do botão */
+        textarea {
+            line-height: 1.5rem; /* 24px */
+        }
+
+        /* Estilo para o botão de link */
+        #lightgg-link {
+            transition: opacity 0.2s ease-in-out, top 0.1s linear;
+        }
         .link-icon:hover {
-            opacity: 0.7;
+            transform: scale(1.1);
         }
     </style>
 </head>
 <body class="bg-gray-900 text-white flex flex-col items-center min-h-screen p-4">
 
-    <div id="app" class="w-full max-w-4xl">
+    <div id="app" class="w-full max-w-5xl">
         <header class="text-center mb-8">
             <h1 class="text-4xl font-bold mb-2">Destiny 2 Tradutor</h1>
             <p class="text-lg text-gray-400">Traduza nomes de armas e perks entre Português e Inglês</p>
@@ -57,90 +65,68 @@
 
         <!-- Conteúdo Principal do Tradutor (inicialmente oculto) -->
         <main id="translator-container" class="hidden">
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Layout de 3 colunas: PT | Botão | EN -->
+            <div class="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
                 <!-- Coluna Português (Input) -->
-                <div>
-                    <h3 class="text-xl font-semibold mb-2 text-center md:text-left">Português</h3>
-                    <textarea id="pt-area" class="w-full h-80 border border-gray-700 rounded-lg p-4 focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none" placeholder="Digite aqui..."></textarea>
+                <textarea id="pt-area" class="w-full h-80 border border-gray-700 rounded-lg p-4 focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none" placeholder="Digite aqui..."></textarea>
+                
+                <!-- Coluna do Botão de Link -->
+                <div id="link-button-container" class="h-80 relative flex items-center justify-center w-16">
+                    <a id="lightgg-link" href="#" target="_blank" class="absolute hidden p-2 bg-gray-700 hover:bg-blue-600 rounded-full transition-all duration-200 link-icon" title="Ver no light.gg">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-box-arrow-up-right" viewBox="0 0 16 16">
+                          <path fill-rule="evenodd" d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/>
+                          <path fill-rule="evenodd" d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"/>
+                        </svg>
+                    </a>
                 </div>
+
                 <!-- Coluna Inglês (Input/Output) -->
-                <div>
-                    <h3 class="text-xl font-semibold mb-2 text-center md:text-left">Inglês</h3>
-                    <textarea id="en-area" class="w-full h-80 border border-gray-700 rounded-lg p-4 focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none" placeholder="Ou digite aqui..."></textarea>
-                </div>
-            </div>
-            
-            <!-- NOVA ÁREA DE RESULTADOS COM LINKS -->
-            <div id="links-area" class="mt-6 w-full">
-                <!-- Os links serão inseridos aqui pelo JavaScript -->
+                <textarea id="en-area" class="w-full h-80 border border-gray-700 rounded-lg p-4 focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none" placeholder="Ou digite aqui..."></textarea>
             </div>
         </main>
     </div>
 
     <script>
     (async function () {
-        // Chave da API da Bungie.
         const apiKey = "4b9c63922cef407083762d343b64e34f"; 
-        
-        // Dicionários para ambas as direções
         const ptToEn = {};
         const enToPt = {};
 
-        // Elementos da UI
         const loaderContainer = document.getElementById('loader-container');
         const translatorContainer = document.getElementById('translator-container');
         const ptEl = document.getElementById('pt-area');
         const enEl = document.getElementById('en-area');
-        const linksEl = document.getElementById('links-area');
+        const lightGgLink = document.getElementById('lightgg-link');
         
-        // Flag para evitar loops infinitos de tradução
         let isUpdating = false;
 
-        /**
-         * Carrega o manifesto da API da Bungie e popula os dicionários de tradução.
-         */
         async function loadManifest() {
             try {
-                const res = await fetch("https://www.bungie.net/Platform/Destiny2/Manifest/", {
-                    headers: { "X-API-Key": apiKey }
-                });
+                const res = await fetch("https://www.bungie.net/Platform/Destiny2/Manifest/", { headers: { "X-API-Key": apiKey } });
                 const manifest = await res.json();
-
                 const ptUrl = "https://www.bungie.net" + manifest.Response.jsonWorldComponentContentPaths["pt-br"].DestinyInventoryItemDefinition;
                 const enUrl = "https://www.bungie.net" + manifest.Response.jsonWorldComponentContentPaths["en"].DestinyInventoryItemDefinition;
-
-                const [ptData, enData] = await Promise.all([
-                    fetch(ptUrl).then(r => r.json()),
-                    fetch(enUrl).then(r => r.json())
-                ]);
+                const [ptData, enData] = await Promise.all([fetch(ptUrl).then(r => r.json()), fetch(enUrl).then(r => r.json())]);
 
                 for (const hash in ptData) {
                     const namePt = ptData[hash]?.displayProperties?.name?.trim();
                     const nameEn = enData[hash]?.displayProperties?.name?.trim();
-                    
-                    if (namePt && nameEn && namePt !== "" && nameEn !== "") {
-                        const itemData = { namePt: namePt, nameEn: nameEn, hash: hash };
+                    if (namePt && nameEn) {
+                        const itemData = { namePt, nameEn, hash };
                         ptToEn[namePt.toLowerCase()] = itemData;
                         enToPt[nameEn.toLowerCase()] = itemData;
                     }
                 }
-
                 loaderContainer.classList.add('hidden');
                 translatorContainer.classList.remove('hidden');
-
             } catch (e) {
                 console.error("Erro ao carregar Manifest da Bungie:", e);
-                loaderContainer.innerHTML = '<p class="text-red-500">Falha ao carregar os dados da Bungie. Por favor, recarregue a página.</p>';
+                loaderContainer.innerHTML = '<p class="text-red-500">Falha ao carregar os dados. Por favor, recarregue a página.</p>';
             }
         }
 
-        /**
-         * Lida com a entrada do usuário em qualquer um dos campos, traduzindo o texto
-         * e exibindo os links correspondentes.
-         * @param {'pt-en' | 'en-pt'} direction - A direção da tradução.
-         */
         function handleTranslation(direction) {
-            if (isUpdating) return; // Previne o loop
+            if (isUpdating) return;
             isUpdating = true;
 
             const sourceEl = direction === 'pt-en' ? ptEl : enEl;
@@ -149,68 +135,60 @@
             const dictionaryKeys = Object.keys(dictionary);
             
             const sourceLines = sourceEl.value.split('\n');
-            const translatedItems = [];
-            
             const translatedTextLines = sourceLines.map(line => {
                 const searchTerm = line.trim().toLowerCase();
                 if (!searchTerm) return "";
-
-                let result = dictionary[searchTerm];
-                if (!result) {
-                    const foundKey = dictionaryKeys.find(key => key.includes(searchTerm));
-                    if (foundKey) result = dictionary[foundKey];
-                }
-
-                if (result) {
-                    translatedItems.push(result);
-                    return direction === 'pt-en' ? result.nameEn : result.namePt;
-                }
-                return line;
+                let result = dictionary[searchTerm] || dictionary[dictionaryKeys.find(key => key.includes(searchTerm))];
+                return result ? (direction === 'pt-en' ? result.nameEn : result.namePt) : line;
             });
 
             targetEl.value = translatedTextLines.join('\n');
-            displayLinks(translatedItems);
-
-            // Permite a próxima atualização
-            setTimeout(() => { isUpdating = false; }, 0);
+            updateLinkButton(sourceEl);
+            setTimeout(() => { isUpdating = false; }, 10);
         }
-        
-        /**
-         * Renderiza a lista de links na área de resultados.
-         * @param {Array<Object>} items - Uma lista de itens traduzidos.
-         */
-        function displayLinks(items) {
-            if (items.length === 0) {
-                linksEl.innerHTML = '';
+
+        function updateLinkButton(activeTextArea) {
+            if (!activeTextArea) {
+                lightGgLink.classList.add('hidden');
                 return;
             }
+            const direction = activeTextArea.id === 'pt-area' ? 'pt-en' : 'en-pt';
+            const dictionary = direction === 'pt-en' ? ptToEn : enToPt;
+            const dictionaryKeys = Object.keys(dictionary);
             
-            const linkIcon = `
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-box-arrow-up-right inline-block" viewBox="0 0 16 16">
-                  <path fill-rule="evenodd" d="M8.636 3.5a.5.5 0 0 0-.5-.5H1.5A1.5 1.5 0 0 0 0 4.5v10A1.5 1.5 0 0 0 1.5 16h10a1.5 1.5 0 0 0 1.5-1.5V7.864a.5.5 0 0 0-1 0V14.5a.5.5 0 0 1-.5.5h-10a.5.5 0 0 1-.5-.5v-10a.5.5 0 0 1 .5-.5h6.636a.5.5 0 0 0 .5-.5z"/>
-                  <path fill-rule="evenodd" d="M16 .5a.5.5 0 0 0-.5-.5h-5a.5.5 0 0 0 0 1h3.793L6.146 9.146a.5.5 0 1 0 .708.708L15 1.707V5.5a.5.5 0 0 0 1 0v-5z"/>
-                </svg>
-            `;
+            const text = activeTextArea.value;
+            const cursorPosition = activeTextArea.selectionStart;
+            const lineNum = text.substring(0, cursorPosition).split('\n').length - 1;
+            const currentLineText = text.split('\n')[lineNum];
             
-            const linksHtml = items.map(item => `
-                <a href="https://www.light.gg/db/items/${item.hash}" target="_blank" title="Ver ${item.nameEn} no light.gg" 
-                   class="flex items-center gap-3 p-3 bg-gray-800 hover:bg-gray-700 rounded-lg transition-colors duration-200 mb-2">
-                    <span class="text-blue-400 link-icon">${linkIcon}</span>
-                    <div class="flex-grow">
-                        <span class="font-semibold text-white">${item.nameEn}</span>
-                        <span class="text-sm text-gray-400 block">${item.namePt}</span>
-                    </div>
-                </a>
-            `).join('');
-            
-            linksEl.innerHTML = `<h3 class="text-xl font-semibold mb-2">Resultados (light.gg)</h3>${linksHtml}`;
+            const searchTerm = currentLineText.trim().toLowerCase();
+            let result = dictionary[searchTerm] || dictionary[dictionaryKeys.find(key => key.includes(searchTerm))];
+
+            if (result) {
+                lightGgLink.href = `https://www.light.gg/db/items/${result.hash}`;
+                lightGgLink.title = `Ver ${result.nameEn} no light.gg`;
+                
+                const style = window.getComputedStyle(activeTextArea);
+                const lineHeight = parseFloat(style.lineHeight);
+                const paddingTop = parseFloat(style.paddingTop);
+                
+                const topPosition = (lineNum * lineHeight) + paddingTop + (lineHeight / 2) - (lightGgLink.offsetHeight / 2);
+                
+                lightGgLink.style.top = `${topPosition}px`;
+                lightGgLink.classList.remove('hidden');
+            } else {
+                lightGgLink.classList.add('hidden');
+            }
         }
 
-        // Adiciona os event listeners para tradução em tempo real.
         ptEl.addEventListener('input', () => handleTranslation('pt-en'));
         enEl.addEventListener('input', () => handleTranslation('en-pt'));
+        
+        ['keyup', 'click', 'focus'].forEach(evt => {
+            ptEl.addEventListener(evt, () => updateLinkButton(ptEl));
+            enEl.addEventListener(evt, () => updateLinkButton(enEl));
+        });
 
-        // Inicia o carregamento do manifesto.
         await loadManifest();
     })();
     </script>
